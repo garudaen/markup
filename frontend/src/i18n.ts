@@ -22,6 +22,7 @@ const messages = {
   'title.toLight': { zh: '切换为浅色', en: 'Switch to light theme' },
   'title.toDark': { zh: '切换为深色', en: 'Switch to dark theme' },
   'title.refresh': { zh: '刷新', en: 'Refresh' },
+  'title.github': { zh: 'GitHub 仓库', en: 'GitHub repository' },
   'tab.files': { zh: '文件', en: 'Files' },
   'tab.outline': { zh: '大纲', en: 'Outline' },
   'hint.noMarkdown': { zh: '文件夹内没有 Markdown 文件', en: 'No Markdown files in this folder' },
