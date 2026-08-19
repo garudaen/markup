@@ -1,9 +1,14 @@
 # 构建产物
 build/bin/
+build/dmg/
 frontend/dist/
+/markup
 
 # 前端依赖
 frontend/node_modules/
+
+# Wails 生成的缓存（build 时自动重建）
+frontend/package.json.md5
 
 # Go
 *.exe
@@ -13,6 +18,11 @@ frontend/node_modules/
 *.test
 *.out
 
+# 日志与环境文件
+*.log
+.env
+.env.*
+
 # 系统文件
 .DS_Store
 Thumbs.db
@@ -21,4 +31,3 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-markup
