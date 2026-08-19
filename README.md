@@ -4,11 +4,11 @@
 
 # markup
 
-[toc]
-
 [中文文档](README-cn.md)
 
 A minimalist Markdown editor and reader for macOS (Windows builds also available), built with Go + [Wails](https://wails.io).
+
+![markup screenshot](asset/screen.png)
 
 ## Features
 

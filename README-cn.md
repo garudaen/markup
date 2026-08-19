@@ -4,11 +4,11 @@
 
 # markup
 
-[toc]
-
 [English README](README.md)
 
 一款极简风格的 Markdown 编辑器与阅读器，面向 macOS（也可构建 Windows 版本），使用 Go + [Wails](https://wails.io) 开发。
+
+![markup 界面截图](asset/screen.png)
 
 ## 功能特性
 
