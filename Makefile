@@ -1,5 +1,8 @@
-WAILS := $(shell command -v wails 2>/dev/null || echo $(HOME)/go/bin/wails)
-APP   := build/bin/markup.app
+WAILS   := $(shell command -v wails 2>/dev/null || echo $(HOME)/go/bin/wails)
+APP     := build/bin/markup.app
+# 版本号取最新 git tag（无 tag 时为 dev），架构按当前机器
+VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
+ARCH    := $(shell uname -m | sed 's/x86_64/amd64/')
 
 .PHONY: all help dev build dmg run clean deps bindings frontend-build build-windows installer-windows
 
@@ -17,12 +20,12 @@ dev:
 build:
 	$(WAILS) build
 
-## 打包 macOS DMG 安装镜像，产物在 build/bin/markup.dmg
+## 打包 macOS DMG 安装镜像，产物如 build/bin/markup-0.0.1-darwin-arm64.dmg
 dmg: build
 	rm -rf build/dmg && mkdir -p build/dmg
 	cp -R $(APP) build/dmg/
 	ln -s /Applications build/dmg/Applications
-	hdiutil create -volname markup -srcfolder build/dmg -ov -format UDZO build/bin/markup.dmg
+	hdiutil create -volname markup -srcfolder build/dmg -ov -format UDZO build/bin/markup-$(VERSION)-darwin-$(ARCH).dmg
 	rm -rf build/dmg
 
 ## 打开已打包的应用
@@ -33,9 +36,10 @@ run:
 build-windows:
 	$(WAILS) build -platform windows/amd64
 
-## 交叉编译 Windows NSIS 安装包（需要 makensis，brew install makensis）
+## 交叉编译 Windows NSIS 安装包（需要 makensis），产物如 build/bin/markup-0.0.1-windows-amd64-installer.exe
 installer-windows:
 	$(WAILS) build -platform windows/amd64 -nsis
+	mv build/bin/markup-amd64-installer.exe build/bin/markup-$(VERSION)-windows-amd64-installer.exe
 
 ## 安装前端依赖
 deps:
