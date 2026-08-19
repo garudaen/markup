@@ -34,6 +34,7 @@ A minimalist Markdown editor and reader for macOS (Windows builds also available
 | --- | --- |
 | `Cmd+N` | New document |
 | `Cmd+O` | Open file |
+| `Cmd+W` | Close current file |
 | `Cmd+S` | Save (silent overwrite once a path is known) |
 | `Cmd+Shift+S` | Save as |
 | `Cmd+E` | Export HTML |

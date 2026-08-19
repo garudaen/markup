@@ -7,8 +7,8 @@ import { markdown } from '@codemirror/lang-markdown'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { search, searchKeymap } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { ConfirmDelete, ConfirmDiscard, ConfirmRestoreBackup, CreateDir, CreateFile, DeletePath, CheckExternalChange, ExportHTML, ExportPDF, OpenFile, OpenFolder, ReadFile, RefreshFolder, RenamePath, ResolvePath, SaveFile, SaveImage, SaveToPath, SetCurrentFile, SetLanguage } from '../wailsjs/go/main/App'
-import { BrowserOpenURL, WindowGetPosition, WindowGetSize, WindowSetPosition, WindowSetSize } from '../wailsjs/runtime'
+import { ConfirmDelete, ConfirmDiscard, ConfirmRestoreBackup, CreateDir, CreateFile, DeletePath, CheckExternalChange, ExportHTML, ExportPDF, OpenFile, OpenFolder, ReadFile, RefreshFolder, RenamePath, ResolvePath, SaveFile, SaveImage, SaveImageFile, SaveToPath, SetCurrentFile, SetLanguage } from '../wailsjs/go/main/App'
+import { BrowserOpenURL, OnFileDrop, OnFileDropOff, WindowGetPosition, WindowGetSize, WindowSetPosition, WindowSetSize } from '../wailsjs/runtime'
 import { buildExportHtml } from './exportHtml'
 import { locale, t } from './i18n'
 import { main } from '../wailsjs/go/models'
@@ -332,6 +332,7 @@ onMounted(() => {
             { key: 'Mod-Shift-s', run: () => (saveAs(), true) },
             { key: 'Mod-o', run: () => (openFile(), true) },
             { key: 'Mod-n', run: () => (newFile(), true) },
+            { key: 'Mod-w', run: () => (closeFile(), true) },
             { key: 'Mod-b', run: () => (toggleSidebar(), true) },
             { key: 'Mod-e', run: () => (exportHtml(), true) },
             { key: 'Mod-Shift-e', run: () => (exportPdf(), true) },
@@ -384,11 +385,10 @@ onMounted(() => {
   view.scrollDOM.addEventListener('scroll', onEditorScroll, { passive: true })
   render(INITIAL_DOC)
   window.addEventListener('keydown', onGlobalKeydown)
-  window.addEventListener('dragover', swallowFileDrop)
-  window.addEventListener('drop', swallowFileDrop)
   window.addEventListener('resize', scheduleWindowSave)
   window.addEventListener('beforeunload', saveWindowState)
   window.addEventListener('focus', onWindowFocus)
+  OnFileDrop(onNativeFileDrop, false)
   // Tell Go the UI language so native dialogs match.
   SetLanguage(locale)
   // Wails bindings are injected before the frontend loads, so they are safe
@@ -414,6 +414,9 @@ function onGlobalKeydown(e: KeyboardEvent) {
   } else if (key === 'n') {
     e.preventDefault()
     newFile()
+  } else if (key === 'w') {
+    e.preventDefault()
+    closeFile()
   } else if (key === 'b') {
     e.preventDefault()
     toggleSidebar()
@@ -434,11 +437,10 @@ onBeforeUnmount(() => {
   if (editorScrollRaf) cancelAnimationFrame(editorScrollRaf)
   view?.scrollDOM.removeEventListener('scroll', onEditorScroll)
   window.removeEventListener('keydown', onGlobalKeydown)
-  window.removeEventListener('dragover', swallowFileDrop)
-  window.removeEventListener('drop', swallowFileDrop)
   window.removeEventListener('resize', scheduleWindowSave)
   window.removeEventListener('beforeunload', saveWindowState)
   window.removeEventListener('focus', onWindowFocus)
+  OnFileDropOff()
   view?.destroy()
 })
 
@@ -721,13 +723,17 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-function isImageFile(file: File): boolean {
-  return file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(file.name)
+/** Insert a relative ![](...) link to rel at pos. The existing /__local__/
+ * middleware serves it in the preview on the next render. */
+function insertImageLink(rel: string, pos: number) {
+  const insert = `![](${rel})`
+  view?.dispatch({
+    changes: { from: pos, insert },
+    selection: { anchor: pos + insert.length },
+  })
 }
 
-/** Save a pasted/dropped image into assets/ next to the document, then
- * insert a relative ![](...) link at pos. The existing /__local__/
- * middleware serves it in the preview on the next render. */
+/** Save a pasted image into assets/ next to the document, then link it. */
 async function insertImageFile(file: File, pos: number) {
   if (!filePath.value) {
     console.warn(t('msg.saveDocFirst'))
@@ -735,14 +741,45 @@ async function insertImageFile(file: File, pos: number) {
   }
   try {
     const b64 = await fileToBase64(file)
-    const rel = await SaveImage(filePath.value, b64)
-    const insert = `![](${rel})`
-    view?.dispatch({
-      changes: { from: pos, insert },
-      selection: { anchor: pos + insert.length },
-    })
+    insertImageLink(await SaveImage(filePath.value, b64), pos)
   } catch (err) {
     console.error(t('msg.saveImageFailed'), err)
+  }
+}
+
+/** Copy a dropped image file (absolute path from the native drop callback)
+ * into assets/ next to the document, then link it. */
+async function insertImageFromPath(srcPath: string, pos: number) {
+  if (!filePath.value) {
+    console.warn(t('msg.saveDocFirst'))
+    return
+  }
+  try {
+    insertImageLink(await SaveImageFile(filePath.value, srcPath), pos)
+  } catch (err) {
+    console.error(t('msg.saveImageFailed'), err)
+  }
+}
+
+/**
+ * Native file drop (wails DragAndDrop): the callback receives absolute
+ * paths, which WKWebView's File objects lack. Images are copied into
+ * assets/ and linked at the drop position; the first .md/.markdown file is
+ * opened (openTreeFile handles the dirty confirm); anything else is
+ * ignored. The webview's own drop handling is disabled natively
+ * (DisableWebViewDrop), so this is the only drop path.
+ */
+function onNativeFileDrop(x: number, y: number, paths: string[]) {
+  const pos = view?.posAtCoords({ x, y }) ?? view?.state.selection.main.head ?? 0
+  let mdOpened = false
+  for (const p of paths) {
+    if (/\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(p)) {
+      insertImageFromPath(p, pos)
+    } else if (/\.(md|markdown)$/i.test(p)) {
+      if (mdOpened) continue
+      mdOpened = true
+      openTreeFile(p)
+    }
   }
 }
 
@@ -760,24 +797,7 @@ const editorDomHandlers = EditorView.domEventHandlers({
     }
     // text-only clipboard: default paste
   },
-  dragover(event) {
-    // Allow drops of OS files and keep the WebView from navigating.
-    if (event.dataTransfer?.types.includes('Files')) event.preventDefault()
-  },
-  drop(event, view) {
-    const file = Array.from(event.dataTransfer?.files ?? []).find(isImageFile)
-    if (!file) return
-    event.preventDefault()
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head
-    insertImageFile(file, pos)
-    return true
-  },
 })
-
-/** Files dropped outside the editor must not navigate the WebView. */
-function swallowFileDrop(event: DragEvent) {
-  if (event.dataTransfer?.types.includes('Files')) event.preventDefault()
-}
 
 function setEditorContent(content: string) {
   view?.dispatch({
@@ -823,6 +843,18 @@ function newFile() {
     dirty.value = false
     clearBackup()
   })
+}
+
+/** Close the current file, back to an untouched untitled document. No-op
+ * when already there. The filePath watcher notifies Go (SetCurrentFile("")),
+ * and the tree highlight follows automatically. */
+async function closeFile() {
+  if (!filePath.value && !dirty.value) return
+  if (!(await confirmIfDirty())) return
+  filePath.value = ''
+  setEditorContent('')
+  dirty.value = false
+  clearBackup()
 }
 
 /** Save to the current path if known, otherwise fall back to the dialog. */
@@ -955,6 +987,7 @@ function startDrag(event: MouseEvent) {
       <button :class="{ 'sidebar-on': readerMode }" :title="t('title.toggleReader')" @click="toggleReaderMode">{{ t('toolbar.read') }}</button>
       <button @click="newFile">{{ t('toolbar.new') }}</button>
       <button @click="openFile">{{ t('toolbar.open') }}</button>
+      <button :title="t('title.closeFile')" @click="closeFile">{{ t('toolbar.close') }}</button>
       <button @click="openFolder">{{ t('toolbar.folder') }}</button>
       <button @click="save">{{ t('toolbar.save') }}</button>
       <button :title="t('title.exportHtml')" @click="exportHtml">{{ t('toolbar.exportHtml') }}</button>

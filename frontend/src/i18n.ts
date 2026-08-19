@@ -10,6 +10,7 @@ export const locale: Locale = navigator.language.toLowerCase().startsWith('zh') 
 const messages = {
   'toolbar.new': { zh: '新建', en: 'New' },
   'toolbar.open': { zh: '打开', en: 'Open' },
+  'toolbar.close': { zh: '关闭', en: 'Close' },
   'toolbar.folder': { zh: '文件夹', en: 'Folder' },
   'toolbar.save': { zh: '保存', en: 'Save' },
   'toolbar.exportHtml': { zh: '导出 HTML', en: 'HTML' },
@@ -23,6 +24,7 @@ const messages = {
   'title.toDark': { zh: '切换为深色', en: 'Switch to dark theme' },
   'title.refresh': { zh: '刷新', en: 'Refresh' },
   'title.github': { zh: 'GitHub 仓库', en: 'GitHub repository' },
+  'title.closeFile': { zh: '关闭当前文件 (⌘W)', en: 'Close file (⌘W)' },
   'tab.files': { zh: '文件', en: 'Files' },
   'tab.outline': { zh: '大纲', en: 'Outline' },
   'hint.noMarkdown': { zh: '文件夹内没有 Markdown 文件', en: 'No Markdown files in this folder' },

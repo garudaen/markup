@@ -486,18 +486,13 @@ func imageExt(data []byte) string {
 	}
 }
 
-// SaveImage decodes base64Data and writes it as a uniquely named file into
-// the "assets" directory next to docPath (created if missing). It returns
-// the path relative to the document, e.g. "assets/img-20260819-153045.png".
-func (a *App) SaveImage(docPath, base64Data string) (string, error) {
+// writeImageAsset writes data as a uniquely named file into the "assets"
+// directory next to docPath (created if missing) and returns the path
+// relative to the document, e.g. "assets/img-20260819-153045.png".
+func writeImageAsset(docPath string, data []byte, ext string) (string, error) {
 	if docPath == "" {
 		return "", fmt.Errorf("document has no path; save it first")
 	}
-	data, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		return "", err
-	}
-	ext := imageExt(data)
 	assetsDir := filepath.Join(filepath.Dir(docPath), "assets")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
 		return "", err
@@ -518,6 +513,32 @@ func (a *App) SaveImage(docPath, base64Data string) (string, error) {
 		}
 		return "assets/" + name, nil
 	}
+}
+
+// SaveImage decodes base64Data and writes it as a uniquely named file into
+// the "assets" directory next to docPath. It returns the path relative to
+// the document, e.g. "assets/img-20260819-153045.png".
+func (a *App) SaveImage(docPath, base64Data string) (string, error) {
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", err
+	}
+	return writeImageAsset(docPath, data, imageExt(data))
+}
+
+// SaveImageFile copies the image at srcPath into the assets directory next
+// to docPath (used for files dropped onto the window, where the native drop
+// callback provides absolute paths). It returns the document-relative path.
+func (a *App) SaveImageFile(docPath, srcPath string) (string, error) {
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		return "", err
+	}
+	ext := strings.ToLower(filepath.Ext(srcPath))
+	if ext == "" || len(ext) > 6 {
+		ext = imageExt(data)
+	}
+	return writeImageAsset(docPath, data, ext)
 }
 
 // ExportHTML shows a save dialog with an .html filter and writes content.
@@ -561,12 +582,15 @@ func (a *App) ResolvePath(baseFile, rel string) (string, error) {
 
 // SetCurrentFile records the directory of the currently open document so the
 // asset middleware can resolve relative image paths against it. An empty path
-// clears it (new unsaved document).
+// clears it (new unsaved document or file closed), along with the external
+// change tracking of the previous file.
 func (a *App) SetCurrentFile(path string) {
 	a.docDirMu.Lock()
 	defer a.docDirMu.Unlock()
 	if path == "" {
 		a.docDir = ""
+		a.curFile = ""
+		a.curStamp = fileStamp{}
 		return
 	}
 	a.docDir = filepath.Dir(path)

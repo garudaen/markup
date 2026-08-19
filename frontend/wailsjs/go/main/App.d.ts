@@ -40,6 +40,8 @@ export function SaveFile(arg1:string):Promise<string>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
+export function SaveImageFile(arg1:string,arg2:string):Promise<string>;
+
 export function SaveToPath(arg1:string,arg2:string):Promise<void>;
 
 export function SetCurrentFile(arg1:string):Promise<void>;
