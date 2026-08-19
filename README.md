@@ -24,6 +24,7 @@ A minimalist Markdown editor and reader for macOS (Windows builds also available
 - **PDF export** — export to PDF with `Cmd+Shift+E` via headless Chrome/Chromium/Edge (falls back to wkhtmltopdf / weasyprint / pandoc if installed)
 - **External change detection** — saving over an externally modified file asks first; a clean editor auto-reloads when the file changes on disk
 - **Session restore** — relaunching restores the open folder, expanded tree, current document, sidebar state, and window size/position
+- **Recent files & folders** — closing the last file (`Cmd+W`) shows a welcome panel with up to 10 recent files and folders; click to reopen, hover to remove stale entries
 - **File management** — new / open / save / save-as with native macOS dialogs, unsaved-changes indicator (`●`) and discard confirmation
 - **Dark & light themes** — follows the system appearance by default, manual toggle persisted across launches
 - **Reader mode** — hide the editor and read the preview full-width with `Cmd+Shift+P`; editor state (undo history, split ratio) is preserved when toggling back

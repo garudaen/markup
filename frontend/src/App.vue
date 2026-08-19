@@ -125,6 +125,8 @@ const STORAGE = {
   expandedDirs: 'markup-expanded-dirs',
   window: 'markup-window',
   backup: 'markup-backup',
+  recentFiles: 'markup-recent-files',
+  recentFolders: 'markup-recent-folders',
 } as const
 
 /** Write a value to localStorage; empty string removes the key. */
@@ -136,6 +138,54 @@ function persist(key: string, value: string) {
     // storage full/blocked: persistence is best-effort
   }
 }
+
+// --- recent files / folders (MRU, max 10 each) ---
+
+function loadRecent(key: string): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(key) ?? '[]')
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+const recentFiles = ref<string[]>(loadRecent(STORAGE.recentFiles))
+const recentFolders = ref<string[]>(loadRecent(STORAGE.recentFolders))
+
+function addRecent(list: typeof recentFiles, key: string, path: string) {
+  const next = [path, ...list.value.filter((p) => p !== path)].slice(0, 10)
+  list.value = next
+  persist(key, JSON.stringify(next))
+}
+
+function removeRecent(list: typeof recentFiles, key: string, path: string) {
+  const next = list.value.filter((p) => p !== path)
+  list.value = next
+  persist(key, JSON.stringify(next))
+}
+
+/** Template-friendly wrappers (refs auto-unwrap in templates). */
+function removeRecentFile(path: string) {
+  removeRecent(recentFiles, STORAGE.recentFiles, path)
+}
+
+function removeRecentFolder(path: string) {
+  removeRecent(recentFolders, STORAGE.recentFolders, path)
+}
+
+function baseName(path: string): string {
+  return path.split('/').pop() ?? path
+}
+
+// The welcome panel shows only in a true empty state (untitled + blank
+// document), e.g. after Cmd+W. docIsEmpty tracks the editor via the update
+// listener; a session restore that loads a file never shows it.
+// welcomeDismissed lets 新建 leave the panel for a blank editor (reset by
+// closeFile so Cmd+W keeps showing the recent list).
+const docIsEmpty = ref(false)
+const welcomeDismissed = ref(false)
+const showWelcome = computed(() => !filePath.value && docIsEmpty.value && !welcomeDismissed.value)
 
 // --- window geometry persistence ---
 
@@ -373,6 +423,7 @@ onMounted(() => {
         }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
+            docIsEmpty.value = update.state.doc.length === 0
             dirty.value = true
             scheduleRender()
             scheduleBackup()
@@ -561,6 +612,7 @@ async function openFolder() {
     expanded.value = new Set()
     sidebarVisible.value = true
     sidebarTab.value = 'files'
+    addRecent(recentFolders, STORAGE.recentFolders, tree.path)
   } catch (err) {
     console.error(t('msg.openFolderFailed'), err)
   }
@@ -576,16 +628,46 @@ async function refreshFolder() {
   }
 }
 
-async function openTreeFile(path: string) {
-  if (path === filePath.value || !(await confirmIfDirty())) return
+/** Open a Markdown file by path (tree click, relative link, native drop,
+ * recent list). Returns 'ok' | 'cancel' | 'error' so callers can react. */
+async function openTreeFile(path: string): Promise<'ok' | 'cancel' | 'error'> {
+  if (path === filePath.value) return 'ok'
+  if (!(await confirmIfDirty())) return 'cancel'
   try {
     const content = await ReadFile(path)
     filePath.value = path
     setEditorContent(content)
     dirty.value = false
     clearBackup()
+    addRecent(recentFiles, STORAGE.recentFiles, path)
+    return 'ok'
   } catch (err) {
     console.error(t('msg.openFileFailed'), err)
+    return 'error'
+  }
+}
+
+/** Recent list entries may be stale: a vanished file is dropped from the
+ * list silently (console note only). */
+async function openRecentFile(path: string) {
+  if ((await openTreeFile(path)) === 'error') {
+    removeRecent(recentFiles, STORAGE.recentFiles, path)
+    console.warn(t('msg.recentMissing'), path)
+  }
+}
+
+async function openRecentFolder(path: string) {
+  try {
+    const tree = await RefreshFolder(path)
+    if (!tree.path) throw new Error('folder gone')
+    folder.value = tree
+    expanded.value = new Set()
+    sidebarVisible.value = true
+    sidebarTab.value = 'files'
+    addRecent(recentFolders, STORAGE.recentFolders, path)
+  } catch {
+    removeRecent(recentFolders, STORAGE.recentFolders, path)
+    console.warn(t('msg.recentMissing'), path)
   }
 }
 
@@ -705,6 +787,7 @@ async function deleteTreeNode(node: main.TreeNode) {
       filePath.value = ''
       setEditorContent('')
       dirty.value = false
+      welcomeDismissed.value = false
     }
     await refreshFolder()
   } catch (err) {
@@ -828,6 +911,7 @@ async function openFile() {
     setEditorContent(file.content)
     dirty.value = false
     clearBackup()
+    addRecent(recentFiles, STORAGE.recentFiles, file.path)
   } catch (err) {
     console.error(t('msg.openFileFailed'), err)
   } finally {
@@ -842,6 +926,9 @@ function newFile() {
     setEditorContent('')
     dirty.value = false
     clearBackup()
+    // Leave the welcome panel and hand the user a focused blank editor.
+    welcomeDismissed.value = true
+    view?.focus()
   })
 }
 
@@ -855,6 +942,7 @@ async function closeFile() {
   setEditorContent('')
   dirty.value = false
   clearBackup()
+  welcomeDismissed.value = false // empty state again: show the recent list
 }
 
 /** Save to the current path if known, otherwise fall back to the dialog. */
@@ -866,6 +954,7 @@ async function save() {
       const path = await SaveFile(currentDoc())
       if (!path) return
       filePath.value = path
+      addRecent(recentFiles, STORAGE.recentFiles, path)
     }
     dirty.value = false
     clearBackup()
@@ -886,6 +975,7 @@ async function saveAs() {
     filePath.value = path
     dirty.value = false
     clearBackup()
+    addRecent(recentFiles, STORAGE.recentFiles, path)
   } catch (err) {
     console.error(t('msg.saveAsFailed'), err)
   } finally {
@@ -1064,7 +1154,34 @@ function startDrag(event: MouseEvent) {
         </div>
       </aside>
       <div v-show="!readerMode" class="editor" :style="{ flexBasis: editorPct + '%' }">
-        <div ref="editorEl" class="editor-host"></div>
+        <div v-show="!showWelcome" ref="editorEl" class="editor-host"></div>
+        <div v-if="showWelcome" class="welcome">
+          <section v-if="recentFiles.length">
+            <h3>{{ t('recent.files') }}</h3>
+            <div v-for="p in recentFiles" :key="p" class="recent-row" @click="openRecentFile(p)">
+              <span class="recent-name">{{ baseName(p) }}</span>
+              <span class="recent-path" :title="p">{{ p }}</span>
+              <button
+                class="recent-remove"
+                :title="t('recent.remove')"
+                @click.stop="removeRecentFile(p)"
+              >×</button>
+            </div>
+          </section>
+          <section v-if="recentFolders.length">
+            <h3>{{ t('recent.folders') }}</h3>
+            <div v-for="p in recentFolders" :key="p" class="recent-row" @click="openRecentFolder(p)">
+              <span class="recent-name">{{ baseName(p) }}</span>
+              <span class="recent-path" :title="p">{{ p }}</span>
+              <button
+                class="recent-remove"
+                :title="t('recent.remove')"
+                @click.stop="removeRecentFolder(p)"
+              >×</button>
+            </div>
+          </section>
+          <p v-if="!recentFiles.length && !recentFolders.length" class="welcome-hint">{{ t('recent.empty') }}</p>
+        </div>
       </div>
       <div v-show="!readerMode" class="divider" @mousedown="startDrag"></div>
       <div ref="previewEl" class="preview markdown-body" v-html="renderedHtml" @click="onPreviewClick"></div>
@@ -1351,6 +1468,86 @@ function startDrag(event: MouseEvent) {
 
 .editor-host {
   height: 100%;
+}
+
+/* welcome / recent panel, shown in the empty untitled state */
+.welcome {
+  height: 100%;
+  overflow-y: auto;
+  padding: 32px 28px;
+  background: var(--bg);
+}
+
+.welcome h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.welcome section + section {
+  margin-top: 20px;
+}
+
+.recent-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.recent-row:hover {
+  background: var(--bg-hover);
+}
+
+.recent-name {
+  flex: none;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.recent-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* truncate long paths at the front */
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.recent-remove {
+  flex: none;
+  visibility: hidden;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.recent-row:hover .recent-remove {
+  visibility: visible;
+}
+
+.recent-remove:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.welcome-hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 14px;
 }
 
 .editor-host :deep(.cm-editor) {

@@ -42,6 +42,33 @@ function pageCss(): string {
 
 const LOCAL_PREFIX = '/__local__/'
 
+// KaTeX fonts as lazy base64 data-URI modules: only imported when exporting,
+// so they never touch the main chunk. (In the app itself the plain
+// katex.min.css import is processed by Vite, which emits the fonts as
+// static assets — no 404 there. Only the exported file needs inlining.)
+const katexFontModules = import.meta.glob('/node_modules/katex/dist/fonts/*.woff2', {
+  query: '?inline',
+  import: 'default',
+}) as Record<string, () => Promise<string>>
+
+/** Replace url(fonts/xxx.woff2) in the KaTeX CSS with data URIs so the
+ * exported file renders math with the proper fonts offline. woff/ttf
+ * fallback declarations are left in place but never reached. */
+async function inlineKatexFonts(css: string): Promise<string> {
+  const names = [...new Set([...css.matchAll(/url\(fonts\/([^)\s]+\.woff2)\)/g)].map((m) => m[1]))]
+  const pairs = await Promise.all(
+    names.map(async (name) => {
+      const load = katexFontModules[`/node_modules/katex/dist/fonts/${name}`]
+      return [name, load ? await load() : null] as const
+    }),
+  )
+  let out = css
+  for (const [name, dataUri] of pairs) {
+    if (dataUri) out = out.split(`url(fonts/${name})`).join(`url(${dataUri})`)
+  }
+  return out
+}
+
 const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -86,10 +113,9 @@ function escapeHtml(s: string): string {
 
 /**
  * Build a self-contained HTML document from the rendered preview DOM.
- * KaTeX output is already inline HTML, mermaid blocks are inline SVG, and
- * local images are inlined as data URLs, so the result needs no assets.
- * (KaTeX's CSS references its web fonts; without them math falls back to
- * system fonts but stays readable.)
+ * KaTeX output is already inline HTML (its web fonts are embedded as data
+ * URIs by inlineKatexFonts), mermaid blocks are inline SVG, and local
+ * images are inlined as data URLs, so the result needs no assets.
  */
 export async function buildExportHtml(
   preview: HTMLElement,
@@ -98,7 +124,13 @@ export async function buildExportHtml(
 ): Promise<string> {
   const container = preview.cloneNode(true) as HTMLElement
   await inlineLocalImages(container, currentFile)
-  const css = [themeVarsCss(), pageCss(), markdownBodyCss, katexCss, theme.value === 'dark' ? hljsDarkCss : hljsLightCss].join('\n')
+  const css = [
+    themeVarsCss(),
+    pageCss(),
+    markdownBodyCss,
+    await inlineKatexFonts(katexCss),
+    theme.value === 'dark' ? hljsDarkCss : hljsLightCss,
+  ].join('\n')
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
