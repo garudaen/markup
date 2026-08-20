@@ -115,8 +115,10 @@ func (a *App) recordStamp(path string) {
 }
 
 // SaveToPath writes content to an existing path without showing a dialog.
-// If the file changed on disk since it was last read or saved, the user is
-// asked first; canceling returns ErrOverwriteCanceled and nothing is written.
+// If the file changed on disk since it was last read or saved, nothing is
+// written and ErrExternalConflict is returned; the frontend then asks the
+// user (HTML modal — native MessageDialog can't do custom buttons on
+// Windows) and retries via SaveToPathForce.
 func (a *App) SaveToPath(path string, content string) error {
 	if path == "" {
 		return nil
@@ -128,40 +130,25 @@ func (a *App) SaveToPath(path string, content string) error {
 	if tracked {
 		if info, err := os.Stat(path); err == nil &&
 			(info.ModTime() != stamp.modTime || info.Size() != stamp.size) {
-			ok, err := a.ConfirmOverwrite()
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return ErrOverwriteCanceled
-			}
+			return ErrExternalConflict
 		}
+	}
+	return a.SaveToPathForce(path, content)
+}
+
+// ErrExternalConflict marks a save refused because the file changed on disk.
+var ErrExternalConflict = errors.New("external conflict")
+
+// SaveToPathForce writes content to path without the external-change check.
+func (a *App) SaveToPathForce(path string, content string) error {
+	if path == "" {
+		return nil
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return err
 	}
 	a.recordStamp(path)
 	return nil
-}
-
-// ErrOverwriteCanceled marks a save canceled at the external-change warning.
-var ErrOverwriteCanceled = errors.New("overwrite canceled")
-
-// ConfirmOverwrite warns that the file on disk was changed externally and
-// asks whether to overwrite it.
-func (a *App) ConfirmOverwrite() (bool, error) {
-	choice, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-		Type:          runtime.WarningDialog,
-		Title:         a.tr("文件已被外部修改", "File Changed Externally"),
-		Message:       a.tr("磁盘上的文件已被外部修改，覆盖将丢失那些改动。确定要覆盖吗？", "The file on disk was changed externally. Overwriting will lose those changes. Overwrite anyway?"),
-		Buttons:       []string{a.tr("覆盖", "Overwrite"), a.tr("取消", "Cancel")},
-		DefaultButton: a.tr("取消", "Cancel"),
-		CancelButton:  a.tr("取消", "Cancel"),
-	})
-	if err != nil {
-		return false, err
-	}
-	return choice == a.tr("覆盖", "Overwrite"), nil
 }
 
 // CheckExternalChange reports whether the current document changed on disk
@@ -408,44 +395,6 @@ func (a *App) DeletePath(path string) error {
 	return os.Remove(abs)
 }
 
-// ConfirmRestoreBackup asks whether the unsaved content found in
-// localStorage from a previous session should be restored.
-func (a *App) ConfirmRestoreBackup() (bool, error) {
-	choice, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-		Type:          runtime.QuestionDialog,
-		Title:         a.tr("恢复未保存的内容", "Restore Unsaved Content"),
-		Message:       a.tr("检测到上次退出前有未保存的修改，是否恢复？", "Unsaved changes from the previous session were detected. Restore them?"),
-		Buttons:       []string{a.tr("恢复", "Restore"), a.tr("丢弃", "Discard")},
-		DefaultButton: a.tr("恢复", "Restore"),
-		CancelButton:  a.tr("丢弃", "Discard"),
-	})
-	if err != nil {
-		return false, err
-	}
-	return choice == a.tr("恢复", "Restore"), nil
-}
-
-// ConfirmDelete shows a native dialog asking whether the entry may be
-// deleted (window.confirm is not supported inside the WKWebView).
-func (a *App) ConfirmDelete(name string, isDir bool) (bool, error) {
-	kind := a.tr("文件", "file")
-	if isDir {
-		kind = a.tr("文件夹", "folder")
-	}
-	choice, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-		Type:          runtime.WarningDialog,
-		Title:         a.tr("删除", "Delete ")+kind,
-		Message:       fmt.Sprintf(a.tr("确定要删除%s“%s”吗？此操作不可撤销。", "Delete the %s “%s”? This cannot be undone."), kind, name),
-		Buttons:       []string{a.tr("删除", "Delete"), a.tr("取消", "Cancel")},
-		DefaultButton: a.tr("取消", "Cancel"),
-		CancelButton:  a.tr("取消", "Cancel"),
-	})
-	if err != nil {
-		return false, err
-	}
-	return choice == a.tr("删除", "Delete"), nil
-}
-
 // ReadFile returns the content of the file at path.
 func (a *App) ReadFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
@@ -639,23 +588,6 @@ func (a *App) localFileMiddleware(next http.Handler) http.Handler {
 		// Last-Modified, so changed files are revalidated on reload.
 		http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 	})
-}
-
-// ConfirmDiscard shows a native dialog asking whether unsaved changes may be
-// discarded (window.confirm is not supported inside the WKWebView).
-func (a *App) ConfirmDiscard() (bool, error) {
-	choice, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-		Type:          runtime.WarningDialog,
-		Title:         a.tr("未保存的修改", "Unsaved Changes"),
-		Message:       a.tr("当前文档有未保存的修改，确定要放弃吗？", "The current document has unsaved changes. Discard them?"),
-		Buttons:       []string{a.tr("放弃修改", "Discard"), a.tr("取消", "Cancel")},
-		DefaultButton: a.tr("取消", "Cancel"),
-		CancelButton:  a.tr("取消", "Cancel"),
-	})
-	if err != nil {
-		return false, err
-	}
-	return choice == a.tr("放弃修改", "Discard"), nil
 }
 
 // SaveFile shows a macOS save dialog and writes content to the chosen path.

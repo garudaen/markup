@@ -7,7 +7,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { search, searchKeymap } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { ConfirmDelete, ConfirmDiscard, ConfirmRestoreBackup, CreateDir, CreateFile, DeletePath, CheckExternalChange, ExportHTML, ExportPDF, OpenFile, OpenFolder, ReadFile, RefreshFolder, RenamePath, ResolvePath, SaveFile, SaveImage, SaveImageFile, SaveToPath, SetCurrentFile, SetLanguage } from '../wailsjs/go/main/App'
+import { CreateDir, CreateFile, DeletePath, CheckExternalChange, ExportHTML, ExportPDF, OpenFile, OpenFolder, ReadFile, RefreshFolder, RenamePath, ResolvePath, SaveFile, SaveImage, SaveImageFile, SaveToPath, SaveToPathForce, SetCurrentFile, SetLanguage } from '../wailsjs/go/main/App'
 import { BrowserOpenURL, OnFileDrop, OnFileDropOff, WindowGetPosition, WindowGetSize, WindowSetPosition, WindowSetSize } from '../wailsjs/runtime'
 import { buildExportHtml } from './exportHtml'
 import { locale, t } from './i18n'
@@ -271,12 +271,7 @@ async function checkBackup() {
     clearBackup()
     return
   }
-  let restore = false
-  try {
-    restore = await ConfirmRestoreBackup()
-  } catch {
-    return // dialog failed: keep the backup for next launch
-  }
+  const restore = await confirmDialog(t('dlg.restoreTitle'), t('dlg.restoreMsg'), t('dlg.restoreOk'), t('dlg.restoreDiscard'))
   if (restore) {
     filePath.value = typeof backup.filePath === 'string' ? backup.filePath : ''
     setEditorContent(backup.content)
@@ -453,6 +448,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
     closeCtxMenu()
     return
   }
+  if (confirmState.value) return // modal owns the keyboard while open
   if (!(e.metaKey || e.ctrlKey) || e.defaultPrevented) return
   const key = e.key.toLowerCase()
   if (key === 's') {
@@ -780,7 +776,13 @@ async function commitEdit() {
 async function deleteTreeNode(node: main.TreeNode) {
   closeCtxMenu()
   try {
-    if (!(await ConfirmDelete(node.name, node.isDir))) return
+    const ok = await confirmDialog(
+      t(node.isDir ? 'dlg.deleteTitleDir' : 'dlg.deleteTitleFile'),
+      t('dlg.deleteMsg', { name: node.name }),
+      t('dlg.deleteOk'),
+      t('dlg.cancel'),
+    )
+    if (!ok) return
     await DeletePath(node.path)
     if (filePath.value && (filePath.value === node.path || filePath.value.startsWith(node.path + '/'))) {
       // the open document was deleted: reset to an untitled state
@@ -888,14 +890,39 @@ function setEditorContent(content: string) {
   })
 }
 
+// --- modal confirm dialog ---
+// Native runtime.MessageDialog is a Win32 MessageBox on Windows: custom
+// button labels are ignored and a warning dialog shows a single "OK" whose
+// result never matches our labels. An HTML modal behaves identically on
+// every platform, so all confirm-style prompts go through confirmDialog.
+// (System file open/save dialogs are unaffected and stay native.)
+
+const confirmState = ref<{
+  title: string
+  message: string
+  confirmText: string
+  cancelText: string
+  resolve: (ok: boolean) => void
+} | null>(null)
+const confirmBoxEl = ref<HTMLElement>()
+
+function confirmDialog(title: string, message: string, confirmText: string, cancelText: string): Promise<boolean> {
+  if (confirmState.value) return Promise.resolve(false) // one at a time
+  return new Promise((resolve) => {
+    confirmState.value = { title, message, confirmText, cancelText, resolve }
+    nextTick(() => confirmBoxEl.value?.focus())
+  })
+}
+
+function settleConfirm(ok: boolean) {
+  confirmState.value?.resolve(ok)
+  confirmState.value = null
+}
+
 /** Ask the user before discarding unsaved changes; true = proceed. */
 async function confirmIfDirty(): Promise<boolean> {
   if (!dirty.value) return true
-  try {
-    return await ConfirmDiscard()
-  } catch {
-    return false
-  }
+  return confirmDialog(t('dlg.discardTitle'), t('dlg.discardMsg'), t('dlg.discardOk'), t('dlg.cancel'))
 }
 
 // Guards against opening a second native dialog while one is showing.
@@ -949,7 +976,16 @@ async function closeFile() {
 async function save() {
   try {
     if (filePath.value) {
-      await SaveToPath(filePath.value, currentDoc())
+      try {
+        await SaveToPath(filePath.value, currentDoc())
+      } catch (err) {
+        if (!String(err).includes('external conflict')) throw err
+        // The file changed on disk: ask before overwriting. Canceling
+        // leaves the document dirty and nothing is written.
+        const ok = await confirmDialog(t('dlg.overwriteTitle'), t('dlg.overwriteMsg'), t('dlg.overwriteOk'), t('dlg.cancel'))
+        if (!ok) return
+        await SaveToPathForce(filePath.value, currentDoc())
+      }
     } else {
       const path = await SaveFile(currentDoc())
       if (!path) return
@@ -959,9 +995,7 @@ async function save() {
     dirty.value = false
     clearBackup()
   } catch (err) {
-    // ErrOverwriteCanceled: user declined the external-change warning;
-    // the document stays dirty, nothing else to do.
-    if (!String(err).includes('overwrite canceled')) console.error(t('msg.saveFileFailed'), err)
+    console.error(t('msg.saveFileFailed'), err)
   }
 }
 
@@ -1074,7 +1108,7 @@ function startDrag(event: MouseEvent) {
   <div class="app">
     <header class="toolbar">
       <button class="theme-toggle" :class="{ 'sidebar-on': sidebarVisible }" :title="t('title.toggleSidebar')" @click="toggleSidebar">☰</button>
-      <button :class="{ 'sidebar-on': readerMode }" :title="t('title.toggleReader')" @click="toggleReaderMode">{{ t('toolbar.read') }}</button>
+      <button :class="{ 'sidebar-on': readerMode }" :title="t('title.toggleReader')" @click="toggleReaderMode">{{ readerMode ? t('toolbar.edit') : t('toolbar.read') }}</button>
       <button @click="newFile">{{ t('toolbar.new') }}</button>
       <button @click="openFile">{{ t('toolbar.open') }}</button>
       <button :title="t('title.closeFile')" @click="closeFile">{{ t('toolbar.close') }}</button>
@@ -1191,6 +1225,22 @@ function startDrag(event: MouseEvent) {
         <button v-for="item in ctxItems" :key="item.label" @click="item.action">
           {{ item.label }}
         </button>
+      </div>
+    </div>
+    <div v-if="confirmState" class="modal-overlay" @click.self="settleConfirm(false)">
+      <div
+        ref="confirmBoxEl"
+        class="modal"
+        tabindex="-1"
+        @keydown.enter.prevent="settleConfirm(true)"
+        @keydown.esc.prevent.stop="settleConfirm(false)"
+      >
+        <h3 class="modal-title">{{ confirmState.title }}</h3>
+        <p class="modal-message">{{ confirmState.message }}</p>
+        <div class="modal-actions">
+          <button class="modal-btn" @click="settleConfirm(false)">{{ confirmState.cancelText }}</button>
+          <button class="modal-btn modal-btn-primary" @click="settleConfirm(true)">{{ confirmState.confirmText }}</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1412,6 +1462,71 @@ function startDrag(event: MouseEvent) {
 
 .ctx-menu button:hover {
   background: var(--bg-hover);
+}
+
+/* modal confirm dialog */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.modal {
+  min-width: 320px;
+  max-width: 440px;
+  padding: 18px 20px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  outline: none;
+}
+
+.modal-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.modal-message {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  word-wrap: break-word;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-btn {
+  padding: 4px 14px;
+  font-size: 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.modal-btn:hover {
+  background: var(--bg-hover);
+}
+
+.modal-btn-primary {
+  background: var(--border-strong);
+}
+
+.modal-btn-primary:hover {
+  background: var(--text-faint);
 }
 
 .sidebar-hint {

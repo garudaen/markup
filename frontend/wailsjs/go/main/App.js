@@ -6,22 +6,6 @@ export function CheckExternalChange() {
   return window['go']['main']['App']['CheckExternalChange']();
 }
 
-export function ConfirmDelete(arg1, arg2) {
-  return window['go']['main']['App']['ConfirmDelete'](arg1, arg2);
-}
-
-export function ConfirmDiscard() {
-  return window['go']['main']['App']['ConfirmDiscard']();
-}
-
-export function ConfirmOverwrite() {
-  return window['go']['main']['App']['ConfirmOverwrite']();
-}
-
-export function ConfirmRestoreBackup() {
-  return window['go']['main']['App']['ConfirmRestoreBackup']();
-}
-
 export function CreateDir(arg1, arg2) {
   return window['go']['main']['App']['CreateDir'](arg1, arg2);
 }
@@ -84,6 +68,10 @@ export function SaveImageFile(arg1, arg2) {
 
 export function SaveToPath(arg1, arg2) {
   return window['go']['main']['App']['SaveToPath'](arg1, arg2);
+}
+
+export function SaveToPathForce(arg1, arg2) {
+  return window['go']['main']['App']['SaveToPathForce'](arg1, arg2);
 }
 
 export function SetCurrentFile(arg1) {

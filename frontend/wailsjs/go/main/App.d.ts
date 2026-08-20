@@ -4,14 +4,6 @@ import {main} from '../models';
 
 export function CheckExternalChange():Promise<string>;
 
-export function ConfirmDelete(arg1:string,arg2:boolean):Promise<boolean>;
-
-export function ConfirmDiscard():Promise<boolean>;
-
-export function ConfirmOverwrite():Promise<boolean>;
-
-export function ConfirmRestoreBackup():Promise<boolean>;
-
 export function CreateDir(arg1:string,arg2:string):Promise<string>;
 
 export function CreateFile(arg1:string,arg2:string):Promise<string>;
@@ -43,6 +35,8 @@ export function SaveImage(arg1:string,arg2:string):Promise<string>;
 export function SaveImageFile(arg1:string,arg2:string):Promise<string>;
 
 export function SaveToPath(arg1:string,arg2:string):Promise<void>;
+
+export function SaveToPathForce(arg1:string,arg2:string):Promise<void>;
 
 export function SetCurrentFile(arg1:string):Promise<void>;
 
