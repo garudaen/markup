@@ -31,6 +31,8 @@ A minimalist Markdown editor and reader for macOS (Windows builds also available
 
 ## Keyboard Shortcuts
 
+On Windows, use `Ctrl` instead of `Cmd`.
+
 | Shortcut | Action |
 | --- | --- |
 | `Cmd+N` | New document |
