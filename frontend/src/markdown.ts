@@ -6,6 +6,7 @@ import 'katex/dist/katex.min.css'
 import hljsLightCss from 'highlight.js/styles/github.css?inline'
 import hljsDarkCss from 'highlight.js/styles/github-dark.css?inline'
 
+import { t } from './i18n'
 import { theme, type Theme } from './theme'
 
 // --- highlight.js stylesheets, toggled per theme ---
@@ -211,6 +212,52 @@ export function createRenderer(): Md {
   return md
 }
 
+// --- YAML front matter (---\n...\n--- at the very start of the document) ---
+
+export interface FrontMatter {
+  /** Raw YAML between the --- fences (no parsing, displayed as-is). */
+  content: string
+  /** Source with the whole block replaced by blank lines, so the body's
+   * line numbers — and with them data-source-line scroll sync — are
+   * unchanged. */
+  body: string
+}
+
+// Anchored at position 0: a --- fence mid-document is a plain <hr>. A
+// missing closing fence means no match, so an unterminated block is left
+// to normal markdown rendering.
+const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/
+
+export function extractFrontMatter(src: string): FrontMatter | null {
+  const m = FRONT_MATTER_RE.exec(src)
+  if (!m) return null
+  // Keep every newline of the stripped region, drop everything else: the
+  // padded body keeps the original line numbering.
+  const body = m[0].replace(/[^\n]/g, '') + src.slice(m[0].length)
+  return { content: m[1], body }
+}
+
+/** The front matter card prepended to the preview: collapsible, expanded
+ * by default, YAML highlighted by highlight.js. Styles live in
+ * markdown-body.css so the exported HTML carries them too. */
+function frontMatterCard(md: Md, content: string): string {
+  let highlighted: string
+  try {
+    highlighted = hljs.highlight(content, { language: 'yaml' }).value
+  } catch {
+    highlighted = md.utils.escapeHtml(content)
+  }
+  return `<details class="front-matter" open><summary>${md.utils.escapeHtml(t('frontMatter.title'))}</summary><pre class="hljs"><code>${highlighted}</code></pre></details>\n`
+}
+
+/** Render a document, extracting a leading front matter block into the
+ * card above the body. */
+export function renderDocument(md: Md, src: string): string {
+  const fm = extractFrontMatter(src)
+  if (!fm) return md.render(src)
+  return frontMatterCard(md, fm.content) + md.render(fm.body)
+}
+
 export interface OutlineItem {
   level: number
   text: string
@@ -219,7 +266,8 @@ export interface OutlineItem {
 }
 
 export function extractOutline(md: Md, src: string): OutlineItem[] {
-  const tokens = md.parse(src, {})
+  // Strip front matter first so YAML lines can never leak in as headings.
+  const tokens = md.parse(extractFrontMatter(src)?.body ?? src, {})
   const items: OutlineItem[] = []
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]

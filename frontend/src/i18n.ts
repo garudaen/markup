@@ -28,6 +28,7 @@ const messages = {
   'title.closeFile': { zh: '关闭当前文件 (⌘W)', en: 'Close file (⌘W)' },
   'tab.files': { zh: '文件', en: 'Files' },
   'tab.outline': { zh: '大纲', en: 'Outline' },
+  'frontMatter.title': { zh: '元信息', en: 'Front Matter' },
   'hint.noMarkdown': { zh: '文件夹内没有 Markdown 文件', en: 'No Markdown files in this folder' },
   'hint.noFolder': { zh: '尚未打开文件夹', en: 'No folder opened' },
   'hint.noHeadings': { zh: '文档中还没有标题', en: 'No headings in the document' },

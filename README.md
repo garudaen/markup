@@ -15,6 +15,7 @@ A minimalist Markdown editor and reader for macOS (Windows builds also available
 - **Live preview** — split view with a CodeMirror 6 editor on the left and a real-time rendered preview on the right, with a draggable divider
 - **Rich rendering** — syntax-highlighted code blocks (highlight.js), KaTeX math (`$...$` / `$$...$$`), Mermaid diagrams (flowcharts, sequence diagrams, gantt charts, and more)
 - **`[TOC]` syntax** — a standalone `[TOC]` paragraph renders as a clickable table of contents of the document headings
+- **YAML front matter** — a leading `--- ... ---` block renders as a collapsible, YAML-highlighted metadata card at the top of the preview (and in HTML exports); the editor highlights it as YAML
 - **Outline** — heading outline (h1–h3) with click-to-scroll navigation
 - **File tree sidebar** — open a folder to recursively scan `.md` / `.markdown` files; collapsible tree, click to edit, one-click rescan (toggle with `Cmd+B`)
 - **File tree management** — right-click files/folders (or the blank area) to create, rename, or delete entries; inline rename input, native delete confirmation

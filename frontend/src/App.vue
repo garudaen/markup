@@ -4,6 +4,7 @@ import { Compartment, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
+import { yamlFrontmatter } from '@codemirror/lang-yaml'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { search, searchKeymap } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -15,6 +16,7 @@ import { main } from '../wailsjs/go/models'
 import {
   createRenderer,
   extractOutline,
+  renderDocument,
   renderMermaidBlocks,
   scrollPreviewToLine,
   scrollToHeading,
@@ -353,7 +355,7 @@ function currentDoc(): string {
 }
 
 function render(src: string) {
-  renderedHtml.value = md.render(src)
+  renderedHtml.value = renderDocument(md, src)
   outline.value = extractOutline(md, src)
 }
 
@@ -386,7 +388,10 @@ onMounted(() => {
         ),
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
-        markdown(),
+        // yamlFrontmatter wraps markdown(): a leading --- ... --- block is
+        // parsed as YAML (via @lezer/yaml), the rest as markdown. Plain
+        // language extension, no keymaps — no conflict with the shortcuts.
+        yamlFrontmatter({ content: markdown() }),
         search({ top: true }),
         // Chinese search panel labels via the phrases localization mechanism;
         // English is CodeMirror's built-in default and needs no override.
