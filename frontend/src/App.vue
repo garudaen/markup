@@ -8,8 +8,8 @@ import { yamlFrontmatter } from '@codemirror/lang-yaml'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { search, searchKeymap } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { CreateDir, CreateFile, DeletePath, CheckExternalChange, ExportHTML, ExportPDF, OpenFile, OpenFolder, ReadFile, RefreshFolder, RenamePath, ResolvePath, SaveFile, SaveImage, SaveImageFile, SaveToPath, SaveToPathForce, SetCurrentFile, SetLanguage } from '../wailsjs/go/main/App'
-import { BrowserOpenURL, OnFileDrop, OnFileDropOff, WindowGetPosition, WindowGetSize, WindowSetPosition, WindowSetSize } from '../wailsjs/runtime'
+import { CreateDir, CreateFile, DeletePath, CheckExternalChange, ExportHTML, ExportPDF, GetPendingOpenFile, OpenFile, OpenFolder, ReadFile, RefreshFolder, RenamePath, ResolvePath, SaveFile, SaveImage, SaveImageFile, SaveToPath, SaveToPathForce, SetCurrentFile, SetLanguage } from '../wailsjs/go/main/App'
+import { BrowserOpenURL, EventsOn, OnFileDrop, OnFileDropOff, WindowGetPosition, WindowGetSize, WindowSetPosition, WindowSetSize } from '../wailsjs/runtime'
 import { buildExportHtml } from './exportHtml'
 import { locale, t } from './i18n'
 import { main } from '../wailsjs/go/models'
@@ -333,6 +333,26 @@ async function restoreState() {
 
   // Runs last: compares the backup against the restored session document.
   await checkBackup()
+
+  // Cold launch via Finder double-click / "Open With": the "open-file" event
+  // fires before the webview can receive it, so Go caches the path and we
+  // pull it here. The explicitly opened file wins over the restored session
+  // file; openTreeFile handles the (rare) dirty case after a backup restore.
+  try {
+    onSystemOpenFile(await GetPendingOpenFile())
+  } catch {
+    // binding unavailable: best effort
+  }
+}
+
+/** Open a Markdown file requested by the OS (Finder double-click, "Open
+ * With", dock drop). Go emits the "open-file" event on a warm launch and
+ * caches the path for GetPendingOpenFile on a cold one; both routes land
+ * here. Non-Markdown paths (only possible via dock drop) are ignored, as in
+ * onNativeFileDrop. */
+function onSystemOpenFile(path: unknown) {
+  if (typeof path !== 'string' || !/\.(md|markdown)$/i.test(path)) return
+  openTreeFile(path) // no-op for the current file; confirmIfDirty otherwise
 }
 
 const fileName = computed(() => {
@@ -342,6 +362,7 @@ const fileName = computed(() => {
 
 let view: EditorView | undefined
 let renderTimer: ReturnType<typeof setTimeout> | undefined
+let offOpenFile: (() => void) | undefined
 
 /** CodeMirror extensions that depend on the theme (swappable via compartment). */
 const cmThemeCompartment = new Compartment()
@@ -440,6 +461,8 @@ onMounted(() => {
   window.addEventListener('beforeunload', saveWindowState)
   window.addEventListener('focus', onWindowFocus)
   OnFileDrop(onNativeFileDrop, false)
+  // Warm-launch "Open With" / Finder double-click while already running.
+  offOpenFile = EventsOn('open-file', onSystemOpenFile)
   // Tell Go the UI language so native dialogs match.
   SetLanguage(locale)
   // Wails bindings are injected before the frontend loads, so they are safe
@@ -493,6 +516,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', saveWindowState)
   window.removeEventListener('focus', onWindowFocus)
   OnFileDropOff()
+  offOpenFile?.()
   view?.destroy()
 })
 

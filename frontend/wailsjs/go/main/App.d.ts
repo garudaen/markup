@@ -14,6 +14,8 @@ export function ExportHTML(arg1:string,arg2:string):Promise<string>;
 
 export function ExportPDF(arg1:string,arg2:string):Promise<string>;
 
+export function GetPendingOpenFile():Promise<string>;
+
 export function OpenFile():Promise<main.OpenedFile>;
 
 export function OpenFolder():Promise<main.FolderTree>;

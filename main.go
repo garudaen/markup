@@ -32,9 +32,12 @@ func main() {
 			DisableWebViewDrop: true,
 		},
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},
-		// 非 nil 的 Mac 选项：绕开 wails#5519（Mac 为 nil 时绿色缩放按钮被禁用）
-		Mac:             &mac.Options{},
-		OnStartup:        app.startup,
+		// 非 nil 的 Mac 选项：绕开 wails#5519（Mac 为 nil 时绿色缩放按钮被禁用）。
+		// OnFileOpen：Finder 双击 / "打开方式" / Dock 拖放的文件路径回调。
+		Mac: &mac.Options{
+			OnFileOpen: app.onFileOpen,
+		},
+		OnStartup: app.startup,
 		Bind: []interface{}{
 			app,
 		},

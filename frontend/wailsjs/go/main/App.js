@@ -26,6 +26,10 @@ export function ExportPDF(arg1, arg2) {
   return window['go']['main']['App']['ExportPDF'](arg1, arg2);
 }
 
+export function GetPendingOpenFile() {
+  return window['go']['main']['App']['GetPendingOpenFile']();
+}
+
 export function OpenFile() {
   return window['go']['main']['App']['OpenFile']();
 }

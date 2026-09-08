@@ -23,6 +23,73 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
+        <!-- Markdown 文档关联：进入 Finder "打开方式" 列表（Alternate 不抢占
+             默认打开方式，用户可手动把 markup 设为默认） -->
+        <key>CFBundleDocumentTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleTypeName</key>
+                <string>Markdown Document</string>
+                <key>CFBundleTypeRole</key>
+                <string>Editor</string>
+                <key>LSHandlerRank</key>
+                <string>Alternate</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                    <string>net.daringfireball.markdown</string>
+                    <string>public.markdown</string>
+                </array>
+            </dict>
+        </array>
+        <!-- 系统未注册 net.daringfireball.markdown 时的兜底定义
+             （Imported 表示该 UTI 归属他人/系统，此处仅补全声明） -->
+        <key>UTImportedTypeDeclarations</key>
+        <array>
+            <dict>
+                <key>UTTypeIdentifier</key>
+                <string>net.daringfireball.markdown</string>
+                <key>UTTypeDescription</key>
+                <string>Markdown Document</string>
+                <key>UTTypeConformsTo</key>
+                <array>
+                    <string>public.plain-text</string>
+                </array>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                    <key>public.filename-extension</key>
+                    <array>
+                        <string>md</string>
+                        <string>markdown</string>
+                    </array>
+                    <key>public.mime-type</key>
+                    <array>
+                        <string>text/markdown</string>
+                    </array>
+                </dict>
+            </dict>
+            <dict>
+                <key>UTTypeIdentifier</key>
+                <string>public.markdown</string>
+                <key>UTTypeDescription</key>
+                <string>Markdown Document</string>
+                <key>UTTypeConformsTo</key>
+                <array>
+                    <string>public.plain-text</string>
+                </array>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                    <key>public.filename-extension</key>
+                    <array>
+                        <string>md</string>
+                        <string>markdown</string>
+                    </array>
+                    <key>public.mime-type</key>
+                    <array>
+                        <string>text/markdown</string>
+                    </array>
+                </dict>
+            </dict>
+        </array>
         {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>

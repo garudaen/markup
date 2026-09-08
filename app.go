@@ -40,6 +40,12 @@ type App struct {
 	lang     string
 	curFile  string
 	curStamp fileStamp
+	// pendingOpenFile caches a macOS open-file request (double-click in
+	// Finder): on a cold launch application:openFile: can arrive before the
+	// frontend is ready to receive the "open-file" event, so the frontend
+	// also pulls it via GetPendingOpenFile once it has mounted.
+	openMu          sync.Mutex
+	pendingOpenFile string
 }
 
 // NewApp creates a new App application struct
@@ -71,6 +77,31 @@ func (a *App) tr(zh, en string) string {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+// onFileOpen handles macOS open-file requests (Finder double-click, "Open
+// With", dock drop). The path is always cached for GetPendingOpenFile; when
+// the app context already exists the frontend is also notified via the
+// "open-file" event.
+func (a *App) onFileOpen(filePath string) {
+	a.openMu.Lock()
+	a.pendingOpenFile = filePath
+	a.openMu.Unlock()
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "open-file", filePath)
+	}
+}
+
+// GetPendingOpenFile returns and clears the cached macOS open-file path, or
+// "" when there is none. The frontend calls this once after startup restore
+// to pick up cold-launch requests whose "open-file" event fired before the
+// webview was ready to receive events.
+func (a *App) GetPendingOpenFile() string {
+	a.openMu.Lock()
+	defer a.openMu.Unlock()
+	path := a.pendingOpenFile
+	a.pendingOpenFile = ""
+	return path
 }
 
 // OpenedFile is the result of a successful OpenFile call.
