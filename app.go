@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -102,6 +103,40 @@ func (a *App) GetPendingOpenFile() string {
 	path := a.pendingOpenFile
 	a.pendingOpenFile = ""
 	return path
+}
+
+// markdownFileArg returns the first existing .md/.markdown file among args.
+// Windows opens an associated file by passing it as a plain command-line
+// argument (shell open command); wails itself adds no arguments, so a
+// Markdown file in argv is always an OS open request. Relative paths (only
+// possible from a second instance's forwarded args) resolve against workDir.
+func markdownFileArg(args []string, workDir string) string {
+	for _, arg := range args {
+		if !isMarkdownExt(arg) {
+			continue
+		}
+		if workDir != "" && !filepath.IsAbs(arg) {
+			arg = filepath.Join(workDir, arg)
+		}
+		if info, err := os.Stat(arg); err == nil && !info.IsDir() {
+			return arg
+		}
+	}
+	return ""
+}
+
+// onSecondInstance receives the args of a second process that was refused by
+// SingleInstanceLock (Windows: forwarded via WM_COPYDATA, then the second
+// process exits). Bring the existing window forward and open the file it was
+// asked to open, reusing the same pending/event path as macOS OnFileOpen.
+func (a *App) onSecondInstance(data options.SecondInstanceData) {
+	if a.ctx != nil {
+		runtime.WindowUnminimise(a.ctx)
+		runtime.Show(a.ctx)
+	}
+	if path := markdownFileArg(data.Args, data.WorkingDirectory); path != "" {
+		a.onFileOpen(path)
+	}
 }
 
 // OpenedFile is the result of a successful OpenFile call.

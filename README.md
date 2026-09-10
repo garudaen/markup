@@ -27,6 +27,7 @@ A minimalist Markdown editor and reader for macOS (Windows builds also available
 - **Session restore** — relaunching restores the open folder, expanded tree, current document, sidebar state, and window size/position
 - **Recent files & folders** — closing the last file (`Cmd+W`) shows a welcome panel with up to 10 recent files and folders; click to reopen, hover to remove stale entries
 - **File management** — new / open / save / save-as with native macOS dialogs, unsaved-changes indicator (`●`) and discard confirmation
+- **System file association** — after installing (macOS `.app` / Windows installer), markup appears in the "Open With" menu for `.md` / `.markdown` files; double-clicking opens the file in markup (single instance: a second file is handed to the running window), and markup can be set as the default Markdown app in system settings
 - **Dark & light themes** — follows the system appearance by default, manual toggle persisted across launches
 - **Reader mode** — hide the editor and read the preview full-width with `Cmd+Shift+P`; editor state (undo history, split ratio) is preserved when toggling back
 

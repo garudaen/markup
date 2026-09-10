@@ -99,7 +99,23 @@ Section
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
-    !insertmacro wails.associateFiles
+    ; Markdown 文件关联（礼貌模式）：注册 ProgID 并加入 OpenWithProgids，
+    ; 出现在"打开方式"列表，但不抢占当前默认关联；用户可在"选择其他应用"
+    ; 或系统"默认应用"设置里把 markup 设为默认。刻意不用
+    ; wails.associateFiles：其 APP_ASSOCIATE 会把 Software\Classes\.md 的
+    ; 默认关联直接改写为 markup（wails.json 的 fileAssociations 保持为空，
+    ; 该宏实际不产出任何内容）。
+    WriteRegStr SHELL_CONTEXT "Software\Classes\.md\OpenWithProgids" "markup.markdown" ""
+    WriteRegStr SHELL_CONTEXT "Software\Classes\.markdown\OpenWithProgids" "markup.markdown" ""
+    WriteRegStr SHELL_CONTEXT "Software\Classes\markup.markdown" "" "Markdown Document"
+    WriteRegStr SHELL_CONTEXT "Software\Classes\markup.markdown\DefaultIcon" "" "$INSTDIR\${PRODUCT_EXECUTABLE},0"
+    WriteRegStr SHELL_CONTEXT "Software\Classes\markup.markdown\shell\open\command" "" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    ; Capabilities + RegisteredApplications：进入系统"默认应用"设置列表
+    WriteRegStr SHELL_CONTEXT "Software\markup\Capabilities" "ApplicationName" "markup"
+    WriteRegStr SHELL_CONTEXT "Software\markup\Capabilities" "ApplicationDescription" "Minimal Markdown editor"
+    WriteRegStr SHELL_CONTEXT "Software\markup\Capabilities\FileAssociations" ".md" "markup.markdown"
+    WriteRegStr SHELL_CONTEXT "Software\markup\Capabilities\FileAssociations" ".markdown" "markup.markdown"
+    WriteRegStr SHELL_CONTEXT "Software\RegisteredApplications" "markup" "Software\markup\Capabilities"
     !insertmacro wails.associateCustomProtocols
 
     !insertmacro wails.writeUninstaller
@@ -115,7 +131,20 @@ Section "uninstall"
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
 
-    !insertmacro wails.unassociateFiles
+    ; 卸载时移除 Markdown 关联注册；若用户曾把 markup 设为默认，清掉悬空指向
+    DeleteRegValue SHELL_CONTEXT "Software\Classes\.md\OpenWithProgids" "markup.markdown"
+    DeleteRegValue SHELL_CONTEXT "Software\Classes\.markdown\OpenWithProgids" "markup.markdown"
+    DeleteRegKey SHELL_CONTEXT "Software\Classes\markup.markdown"
+    DeleteRegKey SHELL_CONTEXT "Software\markup\Capabilities"
+    DeleteRegValue SHELL_CONTEXT "Software\RegisteredApplications" "markup"
+    ReadRegStr $R0 SHELL_CONTEXT "Software\Classes\.md" ""
+    ${If} $R0 == "markup.markdown"
+        DeleteRegValue SHELL_CONTEXT "Software\Classes\.md" ""
+    ${EndIf}
+    ReadRegStr $R0 SHELL_CONTEXT "Software\Classes\.markdown" ""
+    ${If} $R0 == "markup.markdown"
+        DeleteRegValue SHELL_CONTEXT "Software\Classes\.markdown" ""
+    ${EndIf}
     !insertmacro wails.unassociateCustomProtocols
 
     !insertmacro wails.deleteUninstaller
