@@ -156,3 +156,63 @@
   background: transparent;
   font-size: 13px;
 }
+
+/* GFM task lists (markdown-it-task-lists markup; read-only like GitHub) */
+.markdown-body .task-list-item { list-style: none; }
+
+.markdown-body .task-list-item-checkbox {
+  margin: 0 0.4em 0.2em -1.4em;
+  vertical-align: middle;
+}
+
+/* Footnotes (markdown-it-footnote markup) */
+.markdown-body .footnotes {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.markdown-body .footnotes-sep {
+  margin: 1.2em 0 0.6em;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.markdown-body .footnote-ref a,
+.markdown-body .footnote-backref {
+  text-decoration: none;
+}
+
+/* GitHub alerts: blockquote starting with [!NOTE] etc. The title is pure
+ * CSS (::before) so exported HTML needs no extra markup. */
+.markdown-body .markdown-alert {
+  padding: 0.5em 1em;
+  color: var(--text);
+  border-left-color: var(--alert-note);
+}
+
+.markdown-body .markdown-alert::before {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--alert-note);
+}
+
+.markdown-body .markdown-alert > :last-child { margin-bottom: 0; }
+
+.markdown-body .markdown-alert-note { border-left-color: var(--alert-note); }
+.markdown-body .markdown-alert-note::before { content: "ⓘ Note"; color: var(--alert-note); }
+
+.markdown-body .markdown-alert-tip { border-left-color: var(--alert-tip); }
+.markdown-body .markdown-alert-tip::before { content: "💡 Tip"; color: var(--alert-tip); }
+
+.markdown-body .markdown-alert-important { border-left-color: var(--alert-important); }
+.markdown-body .markdown-alert-important::before { content: "❗ Important"; color: var(--alert-important); }
+
+.markdown-body .markdown-alert-warning { border-left-color: var(--alert-warning); }
+.markdown-body .markdown-alert-warning::before { content: "⚠ Warning"; color: var(--alert-warning); }
+
+.markdown-body .markdown-alert-caution { border-left-color: var(--alert-caution); }
+.markdown-body .markdown-alert-caution::before { content: "⛔ Caution"; color: var(--alert-caution); }

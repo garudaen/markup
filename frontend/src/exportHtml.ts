@@ -24,6 +24,11 @@ const THEME_VARS = [
   '--error-bg',
   '--error-border',
   '--error-text',
+  '--alert-note',
+  '--alert-tip',
+  '--alert-important',
+  '--alert-warning',
+  '--alert-caution',
   '--scrollbar',
 ]
 

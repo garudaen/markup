@@ -1,6 +1,8 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import markdownItKatex from '@traptitech/markdown-it-katex'
+import markdownItTaskLists from 'markdown-it-task-lists'
+import markdownItFootnote from 'markdown-it-footnote'
 
 import 'katex/dist/katex.min.css'
 import hljsLightCss from 'highlight.js/styles/github.css?inline'
@@ -68,11 +70,55 @@ setHljsTheme(theme.value)
 // derive the instance type from the constructor.
 type Md = InstanceType<typeof MarkdownIt>
 
+/** Minimal structural type for an inline token (markdown-it v15's bundled
+ * types export the class as a value only; see below). */
+interface InlineLike {
+  content: string
+  children?: { type: string; content: string }[] | null
+}
+
+/** Plain-text content of a heading's inline token: text/codespan children
+ * verbatim plus image alt text, formatting and link markup dropped — the
+ * same text GitHub derives heading anchors from. */
+function plainInlineText(inline: InlineLike): string {
+  if (!inline.children?.length) return inline.content
+  let text = ''
+  for (const child of inline.children) {
+    if (child.type === 'text' || child.type === 'codespan' || child.type === 'image') {
+      text += child.content
+    }
+  }
+  return text
+}
+
+/** GitHub's heading slug: lowercase, strip punctuation (letters, digits,
+ * whitespace, underscore and hyphen kept — CJK letters survive), spaces to
+ * hyphens; repeats get a -1/-2/… suffix. */
+function githubSlug(text: string, used: Map<string, number>): string {
+  const base = text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+    .replace(/\s/g, '-')
+  const slug = base || 'section'
+  const n = used.get(slug) ?? 0
+  used.set(slug, n + 1)
+  return n === 0 ? slug : `${slug}-${n}`
+}
+
+// GitHub alert marker at the start of a blockquote's first line.
+const ALERT_RE = /^\s*\[!(note|tip|important|warning|caution)\]\s*/i
+
 export function createRenderer(): Md {
   const md = new MarkdownIt({
     // Content is the local user's own documents, so raw HTML is allowed.
     html: true,
     linkify: true,
+    // breaks stays false: GitHub only turns single newlines into <br> in
+    // comments/issues; rendered files (README etc.) follow CommonMark and
+    // collapse them to spaces. This editor renders files, so paragraphs
+    // wrapped over multiple lines flow like GitHub's file view (e.g. a row
+    // of linked logo images stays in one row).
     highlight(code: string, lang: string): string {
       if (lang && hljs.getLanguage(lang)) {
         try {
@@ -86,6 +132,40 @@ export function createRenderer(): Md {
   })
 
   md.use(markdownItKatex, {})
+
+  // GFM task lists: - [x] / - [ ] render as read-only checkboxes, like
+  // GitHub (labels wrap the item text so the checkbox has a11y context).
+  md.use(markdownItTaskLists, { label: true, labelAfter: true })
+
+  // Footnotes: [^1] ... [^1]: text. Refs render as #fnN anchors, which the
+  // preview's anchor handling (onPreviewClick) scrolls to.
+  md.use(markdownItFootnote)
+
+  // GitHub alerts: a blockquote whose first line is [!NOTE] / [!TIP] /
+  // [!IMPORTANT] / [!WARNING] / [!CAUTION] becomes a styled alert. The marker
+  // is stripped from the text; the visible title comes from CSS ::before in
+  // markdown-body.css, so exported HTML carries it without extra markup.
+  md.core.ruler.push('github_alert', (state) => {
+    for (let i = 0; i < state.tokens.length; i++) {
+      const open = state.tokens[i]
+      if (open.type !== 'blockquote_open') continue
+      const inline = state.tokens[i + 2]
+      if (state.tokens[i + 1]?.type !== 'paragraph_open' || inline?.type !== 'inline') continue
+      const m = ALERT_RE.exec(inline.content)
+      if (!m || !inline.children?.length) continue
+      open.attrJoin('class', `markdown-alert markdown-alert-${m[1].toLowerCase()}`)
+      const first = inline.children[0]
+      if (first.type !== 'text') continue
+      first.content = first.content.replace(ALERT_RE, '')
+      if (first.content !== '') continue
+      inline.children.shift()
+      if (inline.children[0]?.type === 'softbreak' || inline.children[0]?.type === 'hardbreak') {
+        inline.children.shift()
+      }
+      // Marker was the only content: drop the now-empty paragraph entirely.
+      if (inline.children.length === 0) state.tokens.splice(i + 1, 3)
+    }
+  })
 
   // [TOC]: a paragraph consisting solely of "[TOC]" (case-insensitive,
   // surrounding whitespace allowed) becomes a nested list of the document's
@@ -178,6 +258,22 @@ export function createRenderer(): Md {
       for (const child of token.children) {
         if (child.type === 'html_inline') child.content = rewriteHtmlImgSrc(child.content)
       }
+    }
+  })
+
+  // GitHub-style heading anchors: id = lowercased heading text with
+  // punctuation stripped and whitespace turned into hyphens, deduplicated
+  // with -1/-2/… suffixes. This matches GitHub's slugger, so TOCs written
+  // against a GitHub README (lists linking to #major-companies etc.)
+  // resolve in the preview and in exported HTML.
+  md.core.ruler.push('heading_anchors', (state) => {
+    const used = new Map<string, number>()
+    for (let i = 0; i < state.tokens.length; i++) {
+      const token = state.tokens[i]
+      if (token.type !== 'heading_open') continue
+      const inline = state.tokens[i + 1]
+      if (inline?.type !== 'inline') continue
+      token.attrSet('id', githubSlug(plainInlineText(inline), used))
     }
   })
 

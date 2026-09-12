@@ -603,8 +603,22 @@ async function onPreviewClick(event: MouseEvent) {
     BrowserOpenURL(href)
     return
   }
-  // Anchors (no heading ids yet) and non-file schemes: ignore.
-  if (href.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(href)) return
+  // In-document anchor: headings carry GitHub-style ids (see
+  // heading_anchors in markdown.ts); scroll the preview there. markdown-it
+  // percent-encodes non-ASCII hrefs, so decode before lookup.
+  if (href.startsWith('#')) {
+    let id = href.slice(1)
+    try {
+      id = decodeURIComponent(id)
+    } catch {
+      // malformed escape: fall back to the raw id
+    }
+    const target = previewEl.value.querySelector<HTMLElement>('#' + CSS.escape(id))
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  // Non-file schemes: ignore.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return
 
   // Relative link: only .md/.markdown files are opened in the editor.
   const target = href.split('#')[0].split('?')[0]
